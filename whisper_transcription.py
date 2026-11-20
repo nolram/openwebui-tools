@@ -1,12 +1,13 @@
 """
 title: Whisper Transcription
 author: Marlon (nolram)
-description: Transcribe audio files (OGG, OPUS, MP3, WAV, M4A) via the Hades cluster Whisper service (faster-whisper).
+description: Transcribe audio files (OGG, OPUS, MP3, WAV, M4A) using a self-hosted faster-whisper HTTP service. The service endpoint is configured in Valves, never hardcoded.
 required_open_webui_version: 0.4.0
-version: 1.0.0
+version: 1.0.1
 """
 
 import os
+from urllib.parse import urlparse
 
 import requests
 from pydantic import BaseModel, Field
@@ -21,8 +22,12 @@ class Tools:
 
     class Valves(BaseModel):
         whisper_base_url: str = Field(
-            "http://whisper-transcription.aiassist-bot-core.svc.cluster.local:8000",
-            description="Base URL of the Whisper transcription service (no trailing slash).",
+            "",
+            description=(
+                "Base URL of the Whisper transcription service (no trailing slash), "
+                "e.g. http://host:8000. Required: no default is shipped with this tool. "
+                "Falls back to the WHISPER_BASE_URL environment variable when empty."
+            ),
         )
         timeout_seconds: int = Field(300, description="Transcription request timeout in seconds.")
 
@@ -58,7 +63,9 @@ class Tools:
         if task not in ("", "transcribe"):
             data["task"] = task
 
-        base = (self.valves.whisper_base_url or "").rstrip("/")
+        base = self._base_url()
+        if base is None:
+            return self._missing_endpoint_message()
         try:
             with open(target, "rb") as fh:
                 resp = requests.post(
@@ -84,7 +91,9 @@ class Tools:
 
     async def whisper_health(self) -> str:
         """Check whether the Whisper transcription service is reachable and healthy."""
-        base = (self.valves.whisper_base_url or "").rstrip("/")
+        base = self._base_url()
+        if base is None:
+            return self._missing_endpoint_message()
         try:
             resp = requests.get(f"{base}/health", timeout=15)
         except requests.RequestException as exc:
@@ -92,6 +101,31 @@ class Tools:
         if resp.status_code == 200:
             return f"Whisper service healthy: {resp.text}"
         return f"Whisper returned HTTP {resp.status_code}: {resp.text}"
+
+    def _base_url(self):
+        """Resolve the service endpoint from the Valve, then the environment.
+
+        Returns None when unconfigured or when the value is not a usable
+        http(s) URL, so callers can fail with a clear message instead of
+        issuing a request against an empty target.
+        """
+        raw = (self.valves.whisper_base_url or "").strip()
+        if not raw:
+            raw = (os.environ.get("WHISPER_BASE_URL") or "").strip()
+        if not raw:
+            return None
+        parsed = urlparse(raw)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            return None
+        return raw.rstrip("/")
+
+    def _missing_endpoint_message(self) -> str:
+        return (
+            "Error: Whisper service endpoint is not configured. "
+            "Set the 'whisper_base_url' Valve (admin: Workspace > Tools > "
+            "Whisper Transcription > Valves) or the WHISPER_BASE_URL environment "
+            "variable, e.g. http://your-whisper-host:8000"
+        )
 
     def _resolve_audio_file(self, file_path: str, files: list):
         if file_path:

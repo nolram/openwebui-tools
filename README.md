@@ -147,20 +147,56 @@ quando não conseguir.
 
 ## Whisper Transcription
 
-Transcreve arquivos de áudio usando um endpoint compatível com `/v1/audio/transcriptions`.
-Configure `WHISPER_BASE_URL`, `WHISPER_API_KEY` e `WHISPER_MODEL` nas Valves da ferramenta —
-os padrões são genéricos e não apontam para nenhum servidor específico.
+Transcreve arquivos de áudio (`OGG`, `OPUS`, `MP3`, `WAV`, `M4A`, `FLAC`, …) enviando o arquivo
+para um serviço [faster-whisper](https://github.com/SYSTRAN/faster-whisper) via HTTP.
+
+A ferramenta **não traz endpoint padrão**. Configure um destes dois caminhos:
+
+| Forma | Onde | Observação |
+|---|---|---|
+| Valve `whisper_base_url` | Admin → Workspace → Tools → *Whisper Transcription* → Valves | Preferida. Tem precedência. |
+| Variável de ambiente `WHISPER_BASE_URL` | Container do Open WebUI | Usada quando a Valve está vazia. Útil para deploy declarativo. |
+
+Formato esperado: `http://host:porta` (sem barra final, sem path). Esquema diferente de `http`/`https`
+é rejeitado.
+
+Se nada estiver configurado, a ferramenta não quebra o chat: `transcribe_audio` e `whisper_health`
+retornam uma mensagem de erro legível explicando o que configurar.
+
+> **Nota de migração (v1.0.0 → v1.0.1):** releases anteriores embutiam o endpoint no código-fonte.
+> Esse default foi **removido**. Quem já tinha a ferramenta funcionando precisa definir a Valve (ou a
+> variável de ambiente) uma única vez, com o mesmo valor que estava no código. O texto transcrito,
+> a API pública e as assinaturas dos métodos **não mudaram**.
+
+O serviço deve expor:
+
+- `POST /transcribe` — multipart `file` (+ `language`, `task` opcionais) → JSON com `text`
+- `GET /health` — usado por `whisper_health`
 
 ---
 
 ## Desenvolvimento
 
 ```bash
-python3 -m unittest discover -s flex_sub_agent -v
+python3 -m unittest discover -s flex_sub_agent -v   # testes da ferramenta
+python3 -m unittest test_no_internal_endpoints -v   # guard de segurança do repositório
 ```
 
 Os testes rodam offline: os helpers do core do Open WebUI são substituídos por mocks, então
 não é preciso subir a aplicação.
+
+### Guard de segurança
+
+Este repositório é **público**. O teste `test_no_internal_endpoints.py` percorre todos os arquivos
+rastreados pelo git e falha se encontrar:
+
+- host de cluster (`*.<sufixo de cluster interno>`)
+- IP privado literal (faixas `10/8`, `172.16/12`, `192.168/16`, `127/8`)
+- host de registry interno
+- `token.txt`, `install_tool.py` ou `.env` versionados
+
+Rode antes de cada commit. Nenhum endpoint real deve entrar em código, comentário, docstring ou
+documentação — configure por Valve ou variável de ambiente.
 
 Estrutura de `flex_sub_agent/`:
 
@@ -169,6 +205,13 @@ Estrutura de `flex_sub_agent/`:
 | `flex_sub_agent.py` | a ferramenta (copiar e colar no Open WebUI) |
 | `test_flex_sub_agent.py` | testes unitários offline |
 | `README.md` | documentação detalhada e changelog |
+
+Na raiz:
+
+| Arquivo | Papel |
+|---|---|
+| `whisper_transcription.py` | ferramenta de transcrição (copiar e colar no Open WebUI) |
+| `test_no_internal_endpoints.py` | guard de segurança contra vazamento de endpoints |
 
 ---
 
