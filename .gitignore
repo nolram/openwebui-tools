@@ -2,4 +2,10 @@ __pycache__/
 *.pyc
 token.txt
 .env
+
+# Scripts locais de instalação/probe: contêm o endpoint do cluster e nunca devem
+# ser versionados (o repositório é público).
 install_tool.py
+owui_*.py
+probe*.py
+*_openwebui.py
