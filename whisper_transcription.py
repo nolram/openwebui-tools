@@ -6,6 +6,27 @@ required_open_webui_version: 0.4.0
 version: 1.0.1
 """
 
+# ---------------------------------------------------------------------------
+# Known limitation, accepted risk (2026-11-20)
+#
+# Up to and including v1.0.0, this tool shipped its service endpoint as a
+# Valve default in this source file, and version 1.0.0 remains reachable in
+# the git history of a public repository. The maintainer reviewed this and
+# accepted the residual exposure instead of rewriting published history.
+#
+# Assessed impact: the leaked value is an in-cluster DNS name. It is not
+# resolvable nor routable from the public internet, so it reveals naming
+# topology only, and only to someone who can already reach the cluster
+# network. No credential, token or private key was ever committed.
+#
+# Mitigation in place since v1.0.1: no endpoint literal in this file, a
+# repository-wide guard test that fails on cluster hosts and private IPs, and
+# local helper scripts kept out of version control.
+#
+# Do not reintroduce a default here. Configure the whisper_base_url Valve or
+# the WHISPER_BASE_URL environment variable instead.
+# ---------------------------------------------------------------------------
+
 import os
 from urllib.parse import urlparse
 

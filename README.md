@@ -173,6 +173,37 @@ O serviço deve expor:
 - `POST /transcribe` — multipart `file` (+ `language`, `task` opcionais) → JSON com `text`
 - `GET /health` — usado por `whisper_health`
 
+### Risco aceito: endpoint na versão antiga do histórico
+
+**Status: aceito em 2026-11-20, com decisão de não reescrever o histórico.**
+
+Até a `v1.0.0`, esta ferramenta trazia o endpoint do serviço como default de Valve no próprio
+código-fonte. Esse valor **continua recuperável** no commit que introduziu a ferramenta — a `v1.0.1`
+removeu o literal do código, mas não saiu do histórico do git. O mantenedor avaliou o custo de um
+`git filter-repo` + force-push num repositório público e optou por **não** reescrever o histórico.
+
+Estamos falando de um **nome DNS interno de cluster** (`*.<sufixo de cluster interno>`), não de um
+endpoint público:
+
+| Aspecto | Avaliação |
+|---|---|
+| Roteável da internet | **Não.** Só resolve dentro da rede do cluster. |
+| O que revela | Topologia de nomes (namespace + serviço + porta). |
+| Quem consegue explorar | Alguém que já tenha acesso à rede interna — ou seja, já dentro do perímetro. |
+| Credenciais expostas | **Nenhuma.** Nenhum token, senha ou chave privada foi commitado. |
+| Superfície de ataque real | Mínima: o ganho para quem está fora é apenas reconhecimento. |
+
+O que **está** mitigado desde a `v1.0.1`:
+
+- nenhum literal de endpoint no código, docstring ou documentação;
+- `test_no_internal_endpoints.py` reprova o commit se qualquer arquivo rastreado voltar a conter
+  host de cluster, IP privado literal ou host de registry interno;
+- scripts locais que embutem o endpoint real ficam fora do versionamento pelo `.gitignore`.
+
+Quando **revisitar** esta decisão: se o cluster for exposto publicamente, se o sufixo interno mudar
+para um domínio resolvível de fora, ou se qualquer credencial for encontrada em commit antigo. Nesses
+casos, a limpeza de histórico deixa de ser opcional.
+
 ---
 
 ## Desenvolvimento
